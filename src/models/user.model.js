@@ -1,7 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-const useerSchema = new Schema({
+const userSchema = new Schema({
   username:{
     type:String,
     required:true,
@@ -31,48 +31,46 @@ const useerSchema = new Schema({
    coverImage:{
     type:String,
   },
-  watchHistroy:{
-    type:Schema.Types.ObjectId,
+  watchHistroy:[{
+    type: Schema.Types.ObjectId,
     ref:"Video"
-  },
+  }],
   password:{
     type:String,
     required:[true,'Password is Required'],
   },
-  refToken:{
+  refreshToken:{
     type:String,
   }
 },{
     timestamps:true,
 })
 
-useerSchema.pre("save",async function(next){
-    if(!this.isModified("password")) return next();
+userSchema.pre("save", async function () {
+    if (!this.isModified("password")) return;
 
     this.password = await bcrypt.hash(this.password, 10);
-    next();
-    
-})
-useerSchema.methods.isPasswordCorrect = async function
+});
+userSchema.methods.isPasswordCorrect = async function
 (password){
 return await bcrypt.compare(password, this.password);
 }
 
-useerSchema.methods.generateAccessToken = function(){
+userSchema.methods.generateAccessToken = function(){
     return jwt.sign({id:this._id,
                     email:this.email,
                     username:this.username,
                     fullName:this.fullName
     }, 
-    process.env.ACESS_TOKEN_SECRET,
+    process.env.ACCESS_TOKEN_SECRET,
      {
-        expiresIn:process.env.Access_Token_Expiry
+        expiresIn:process.env.ACCESS_TOKEN_EXPIRY
     }
 
 )
 }
-useerSchema.methods.generateRefreshToken = function(){
-    return jwt.sign({id:this._id}, process.env.REFRESH_TOKEN_SECRET, {expiresIn:process.env.Refresh_Token_Expiry})
+userSchema.methods.generateRefreshToken = function(){
+    return jwt.sign({id:this._id}, process.env.REFRESH_TOKEN_SECRET, {expiresIn:process.env.REFRESH_TOKEN_EXPIRY})
 }
 
-export const User = mongoose.model("User",useerSchema)
+export const User = mongoose.model("User",userSchema)

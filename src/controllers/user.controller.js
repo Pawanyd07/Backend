@@ -23,7 +23,7 @@ const registerUser = asyncHandler(async (req, res) => {
     [fullName,email,username,password].some((field) => 
     field?.trim() ==="")
     ){
-        throw new ApiError("All fields are required",400);
+        throw new ApiError(400,"All fields are required");
     }
     const existedUser = await User.findOne({
         //$ is used to perform Logical operations in the object
@@ -31,21 +31,23 @@ const registerUser = asyncHandler(async (req, res) => {
     
     })
     if(existedUser){
-        throw new ApiError("User already exist with this email or username",409);
+        throw new ApiError(409,"User already exist with this email or username");
     }
 
-    const avatarLocalPath = req.files?.avatar[0]?.path;
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+    // const avatarLocalPath = req.files?.avatar?.[0]?.path;
+    // const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+    const avatarLocalPath = req.files?.avatar?.[0]?.path;
+    const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
 
     if(!avatarLocalPath){
-        throw new ApiError("Avatar is required",400);
+        throw new ApiError(400,"Avatar is required");
     }
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
     if(!avatar){ 
-        throw new ApiError("Failed to upload avatar",500);
+        throw new ApiError(500,"Failed to upload avatar");
     }
 
     const user = await User.create({
@@ -57,11 +59,11 @@ const registerUser = asyncHandler(async (req, res) => {
         coverImage: coverImage?.url || ""
     })
     const createdUser = await User.findByIdAndUpdate(user._id).select(
-        "-password -refToken"
+        "-password -refreshToken"
     );
 
     if(!createdUser){
-        throw new ApiError("Somethig went Wrong While Registering User",500);
+        throw new ApiError(500,"Somethig went Wrong While Registering User");
     }
 
 
