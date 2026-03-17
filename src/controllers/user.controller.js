@@ -3,6 +3,25 @@ import{ApiError} from '../utils/ApiError.js';
 import {User} from '../models/User.model.js';
 import {uploadOnCloudinary} from '../utils/cloudinary.js';
 import {ApiResponse} from '../utils/ApiResponse.js';
+import jwt from 'jsonwebtoken';
+
+const generateAccessAndRefreshToken = async (userId) => {
+    try{
+        const user = await User.findById(userId);
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+        
+        user.refreshToken = refreshToken;
+        await user.save({validateBeforeSave:false});
+
+        return {accessToken, refreshToken};
+
+    }catch(error){
+        throw new ApiError(500,"Something went wrong while generating Refresh Token and Access Token");
+    }
+
+};
+
 
 const registerUser = asyncHandler(async (req, res) => {
    // get user detail from Frontend or Postman
@@ -74,5 +93,123 @@ const registerUser = asyncHandler(async (req, res) => {
 
 });
 
+const loginUser = asyncHandler(async (req, res) => {
+    //req body -> Data 
+    //user email or username
+    //find user
+    //password check
+    //acces token and refresh token generate
+    //send cookie
 
-export {registerUser};
+    const {email,username,password} = req.body;
+
+    if(!username && !email){
+        throw new ApiError(400,"Email or Username is required");
+    }
+
+    const user = await User.findOne({
+        $or :[{email},{username}]
+    })
+
+    if(!user){
+        throw new ApiError(404,"User does not exist");
+    }
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if(!isPasswordValid){
+        throw new ApiError(401,"Invalid Password");
+    }
+
+    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id);
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+    const options={
+        httpOnly:true,
+        secure:true,
+        
+    }
+    return res.status(200)
+    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, options)
+    .json(
+        new ApiResponse(200,
+            {
+                user:loggedInUser,
+                 accessToken ,
+                 refreshToken,
+                },
+            "User Logged In Successfully"
+        )
+    );
+    
+
+    
+
+});
+const logoutUser = asyncHandler(async (req, res) => {
+      await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                refreshToken: undefined
+            }
+        },
+        {
+            new:true
+        }
+      )
+       const options={
+        httpOnly:true,
+        secure:true,
+        
+    }
+    return res.status(200)
+    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", options)
+    .json(new ApiResponse(200,{},"User Logged Out Successfully"));
+})
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;   
+    if(!incomingRefreshToken){
+        throw new ApiError(401,"Unauthorized, No token provided");
+    }    
+    
+   try {
+     const decodedToken = jwt.verify(
+         incomingRefreshToken,
+         process.env.ACCESS_TOKEN_SECRET,
+     )
+ 
+     const user = await User.findById(decodedToken?._id)
+ 
+     if(!user ){
+         throw new ApiError(401,"Invalid REFRESH token");
+     }
+ 
+     if(user?.refreshToken !== incomingRefreshToken){
+         throw new ApiError(401,"REFRESH IS EXPIRED OR USED");
+     }
+           const options={
+         httpOnly:true,
+         secure:true,
+     }      
+ 
+     const {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(user._id);
+ 
+     return res.status(200)
+     .cookie("AccessToken", accessToken,options)
+     .cookie("refreshToken", newRefreshToken,options)
+     .json(new ApiResponse(200,{accessToken, refreshToken:newRefreshToken},"Access Token Refreshed Successfully"));
+ 
+   } catch (error) {
+     throw new ApiError(401,error?.message || "Invalid Refresh Token");
+   }
+ 
+});
+
+
+
+export {registerUser,loginUser,logoutUser,refreshAccessToken};
+
+
